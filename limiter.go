@@ -4,6 +4,8 @@
 package watchdog
 
 import (
+	"context"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -75,6 +77,61 @@ func (l *Limiter) AllowN(n float64) bool {
 	return false
 }
 
+// Wait is shorthand for WaitN(ctx, 1).
+func (l *Limiter) Wait(ctx context.Context) error {
+	return l.WaitN(ctx, 1)
+}
+
+// WaitN waits until n tokens are available and returns nil, or waits until ctx is cancelled and returns err.
+func (l *Limiter) WaitN(ctx context.Context, n float64) error {
+	// check if ctx is already cancelled
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	if n < 0 || n > l.burst {
+		return fmt.Errorf("limiter's burst is %f, and %f tokens invalid", l.burst, n)
+	}
+
+	l.mu.Lock()
+	now := time.Now()
+	total := l.tokens + tokensFromDuration(now.Sub(l.lastTime), l.limit)
+	if total > l.burst {
+		total = l.burst
+	}
+	left := total - n
+
+	// make limiter's state updated to current timestamp
+	l.lastTime = now
+	l.tokens = left
+	l.mu.Unlock()
+
+	// control logic
+	if left < 0 {
+		// time to wait
+		timeAfterTrigger := time.After(durationFromTokens(-left, l.limit))
+
+		select {
+		case <-timeAfterTrigger:
+			return nil
+		case <-ctx.Done():
+			// give n tokens back to limiter
+			l.mu.Lock()
+			temp := l.tokens + n
+			if temp > l.burst {
+				temp = l.burst
+			}
+			l.tokens = temp
+			l.mu.Unlock()
+			return ctx.Err()
+		}
+	}
+
+	return nil
+}
+
 // tokensFromDuration is a unit conversion function from a time duration to the number of tokens
 // which could be accumulated during that duration at a rate of limit tokens per second.
 func tokensFromDuration(d time.Duration, limit float64) float64 {
@@ -83,4 +140,11 @@ func tokensFromDuration(d time.Duration, limit float64) float64 {
 	sec := float64(d/time.Second) * limit
 	nsec := float64(d%time.Second) * limit
 	return sec + nsec/1e9
+}
+
+// durationFromTokens is a unit conversion function from the number of tokens to the duration
+// of time it takes to accumulate them at a rate of limit tokens per second.
+func durationFromTokens(tokens, limit float64) time.Duration {
+	seconds := tokens / limit
+	return time.Nanosecond * time.Duration(1e9*seconds)
 }

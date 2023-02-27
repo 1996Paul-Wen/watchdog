@@ -1,6 +1,7 @@
 package watchdog
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -21,4 +22,15 @@ func TestLimiter(t *testing.T) {
 	}
 	tick.Stop()
 	fmt.Println(headOff)
+}
+
+func TestWait(t *testing.T) {
+	l := NewLimiter(100, 1)
+	begin := time.Now()
+	for i := 0; i < 200; i++ {
+		if err := l.WaitN(context.Background(), 1); err != nil {
+			fmt.Println(i, err)
+		}
+	}
+	fmt.Println(time.Since(begin).Milliseconds())
 }
