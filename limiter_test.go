@@ -34,3 +34,17 @@ func TestWait(t *testing.T) {
 	}
 	fmt.Println(time.Since(begin).Milliseconds())
 }
+
+func TestOccupanct(t *testing.T) {
+	l := NewLimiter(100, 1)
+	begin := time.Now()
+	for i := 0; i < 800; i++ {
+		o, err := l.OccupyTokens(time.Now(), InfDuration, 1)
+		if err != nil {
+			fmt.Println(i, err)
+			continue
+		}
+		time.Sleep(o.DelayFrom(time.Now()))
+	}
+	fmt.Println(time.Since(begin).Milliseconds())
+}
