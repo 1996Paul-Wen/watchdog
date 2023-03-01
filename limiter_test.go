@@ -7,23 +7,6 @@ import (
 	"time"
 )
 
-func TestLimiter(t *testing.T) {
-	// 10/s, and only 1 will be permitted at one certain moment
-	// in other words, one single event is permitted every 100ms
-	l := NewLimiter(10, 1)
-
-	var headOff int64 = 0
-	tick := time.NewTicker(50 * time.Millisecond)
-	for i := 0; i < 20; i++ {
-		if !l.Allow() {
-			headOff++
-		}
-		<-tick.C
-	}
-	tick.Stop()
-	fmt.Println(headOff)
-}
-
 func TestWait(t *testing.T) {
 	l := NewLimiter(100, 1)
 	begin := time.Now()
@@ -35,16 +18,28 @@ func TestWait(t *testing.T) {
 	fmt.Println(time.Since(begin).Milliseconds())
 }
 
-func TestOccupanct(t *testing.T) {
-	l := NewLimiter(100, 1)
-	begin := time.Now()
-	for i := 0; i < 800; i++ {
-		o, err := l.OccupyTokens(time.Now(), InfDuration, 1)
-		if err != nil {
-			fmt.Println(i, err)
-			continue
-		}
-		time.Sleep(o.DelayFrom(time.Now()))
+func TestTokens(t *testing.T) {
+	t0 := time.Now()
+	t1 := time.Now().Add(100 * time.Millisecond) // + 1
+	t2 := time.Now().Add(200 * time.Millisecond) // + 2
+	t3 := time.Now().Add(300 * time.Millisecond) // + 3
+
+	l := NewLimiter(10, 20)
+	fmt.Printf("begining tokens: %+v\n", l.TokensAt(time.Now()))
+
+	l.OccupyTokens(t0, InfDuration, 15)
+	fmt.Printf("t0 tokens: %+v\n", l.TokensAt(time.Now())) // bucket left 5 token
+
+	o, err := l.OccupyTokens(t1, InfDuration, 10)
+	if err != nil {
+		fmt.Println(err)
+		return
 	}
-	fmt.Println(time.Since(begin).Milliseconds())
+	fmt.Printf("t1 tokens: %+v\n", l.TokensAt(t1)) // bucket left -4 token
+
+	l.OccupyTokens(t2, InfDuration, 2)
+	fmt.Printf("t2 tokens: %+v\n", l.TokensAt(t2)) // bucket left -5 token
+
+	o.CancelAt(t3)
+	fmt.Printf("t3 tokens: %+v\n", l.TokensAt(t3)) // bucket left 6 token
 }
