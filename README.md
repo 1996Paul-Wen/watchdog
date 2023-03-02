@@ -1,17 +1,38 @@
 # 1. Introduction
-Package watchdog provides a rate limiter based on "token bucket" algorithm. It is a token bucket algorithm implementation **based on real-time calculation and ZERO POINT movement**. The generation of tokens is continuous rather than discrete.
+Package `watchdog` provides a rate limiter based on "token bucket" algorithm. It is a token bucket algorithm implementation **based on real-time calculation and ZERO POINT movement**. The generation of tokens is continuous rather than discrete.
 
-`watchdog`'s biggest advantage is that it is **simpler and easier to understand** than the official implementation `golang.org/x/time/rate`, and **the calculation of token is more reliable**.
-`watchdog`最大的优点是比官方实现`golang.org/x/time/rate`更简单，更容易理解，并且token的计算也更加可靠
+`watchdog` has **2** advantages:
+
+- **Simpler implementation**. `watchdog` implements token bucket algorithm based on the simple **ZERO POINT movement** mechanism, which is simpler and easier to understand than `golang.org/x/time/rate`, the official implementation 
+
+- **More reliable limiting mechanism**. `watchdog` calculates the token correctly, thanks to which the limiting mechanism it provides is reliable. The logic of `golang.org/x/time/rate` is wrong because it considers `reserved tokens` when calculating the returned tokens for canceled events. Related discussions can refer to:
+
+  >https://github.com/golang/go/issues/56924
+
+  >https://stackoverflow.com/questions/70993567/rate-limiting-cancellation-token-restore
+
+  >https://www.v2ex.com/t/877175
+
+  >https://lailin.xyz/post/go-training-week6-3-token-bucket-2.html#comments
+
+  >https://learnku.com/go/t/71323
+
+  This bug is easily fixed by `watchdog`'s **zero point movement** mechanism
+
+
+At the usage level, `watchdog` completely covers the functions of `golang.org/x/time/rate` and maintains a similar interface, so it does not require too much mental burden to use
+
+（`watchdog`最大的优点是比官方实现`golang.org/x/time/rate`更简单，更容易理解，并且token的计算也更加可靠）
 
 # 2. Original impetus of development
 ### 2.1 First
 **to make "token bucket" algorithm implementation simple and stupid**. 
 The official implementation `golang.org/x/time/rate` is a little bit complicated due to its dizzying calculations. I want to make "token bucket" algorithm simpler, easier to understand and implement, not like `golang.org/x/time/rate`.
 
-`watchdog` proposes 2 core concepts: **OCCUPIED TIME SPAN**, **ZERO POINT**. 
+`watchdog` proposes 2 core concepts: **OCCUPIED TIME SPAN** + **ZERO POINT**. 
 Based on these two concepts, **the complex token calculation is transformed into a simple ZERO POINT movement**.
-`watchdog`提出了2个核心概念：**OCCUPIED TIME SPAN**，**ZERO POINT**，并基于这两个概念将复杂的token计算转化为了简单的零点移动。
+
+（`watchdog`提出了2个核心概念：**OCCUPIED TIME SPAN**，**ZERO POINT**，并基于这两个概念将复杂的token计算转化为了简单的零点移动）
 
 For specific design ideas, see **My understanding of "token bucket" algorithm** below.
 
@@ -48,8 +69,8 @@ func tr() {
 }
 ```
 I have added some comments into this example to make it more clear to understand. 
-After r cancelled and tokens returned back at t3 moment, the bucket of the limiter should keep 6 tokens rather than 4: 
-- On the one hand, r occupied 10 tokens before cancellation, so it's a common sense that r should return 10 tokens after its cancellation.
+After `r` cancelled and tokens returned back at t3 moment, the bucket of the limiter should keep 6 tokens rather than 4: 
+- On the one hand, `r` occupied 10 tokens before cancellation, so it's a common sense that `r` should return 10 tokens after its cancellation.
 - On the other hand, 23 tokens in total were generated from t0 to t3, and 17 tokens in total have been consumed during the same period, so 6 left exactly.
 
 `watchdog` fixes this calculation bug. In `watchdog`, **how many tokens are taken and how many will be returned if cancellation happens, as if nothing happened**.
@@ -58,10 +79,12 @@ After r cancelled and tokens returned back at t3 moment, the bucket of the limit
 
 ### 3.1 Pre-knowledge preparation: Events are distributed on the timeline in the form of time spans
 **We say that an event requires several tokens, but what is actually required is the time span corresponding to these tokens on the timeline**. The tokens generated within this time span are all occupied by this event. 
-我们说一个事件需求若干token，实际需求的是时间线上这些token对应的一段时间跨度。这个时间跨度内产生的token，都被该事件占有。
+
+（我们说一个事件需求若干token，实际需求的是时间线上这些token对应的一段时间跨度。这个时间跨度内产生的token，都被该事件占有）
 
 **From this perspective, each event is distributed on the timeline in the form of a time span**. And the time spans do not overlap with each other.
-从这个视角看，每个事件都以一段时间跨度的形式分布在时间线上，并且跨度之间互不重合。
+
+（从这个视角看，每个事件都以一段时间跨度的形式分布在时间线上，并且跨度之间互不重合）
 
 We visualize this understanding as below.
 ```
@@ -74,21 +97,24 @@ From this perspective, it can also be clearly found that it is wrong to consider
 ### 3.2 OCCUPIED TIME SPAN
 
 **OCCUPIED TIME SPAN** indicates an event's occupation of a time span on the timeline. An event holds an OCCUPIED TIME SPAN, which means **that all tokens generated within the time span will be used by the event**.
-OCCUPIED TIME SPAN 表示事件对时间线上一个时间跨度的占有。一个事件持有一个OCCUPIED TIME SPAN，表示该时间跨度内产生的所有token都将归该事件使用
+
+（OCCUPIED TIME SPAN 表示事件对时间线上一个时间跨度的占有。一个事件持有一个OCCUPIED TIME SPAN，表示该时间跨度内产生的所有token都将归该事件使用）
 
 ### 3.3 DEPRECATED TIME SPAN
 
 Because the capacity of the bucket is limited, if there are no new events for a long period of time, the tokens that exceed the capacity of the bucket among all tokens produced during this period will be discarded(deprecated tokens). The time span corresponding to deprecated tokens is called **DEPRECATED TIME SPAN**, which is useless.
-因为bucket的容量有限，如果一段较长的时间内没有新事件，那么这段时间内生产出的所有token中超出bucket容量的那部分token会被丢弃（deprecated tokens）。deprecated tokens 对应的时间跨度称为 DEPRECATED TIME SPAN，这个跨度内的时间都认为是无用的
-注：我们可以将bucket视为队列，DEPRECATED TIME SPAN内产生的tokens根据先进先出原则都被出队丢弃了
+
+（因为bucket的容量有限，如果一段较长的时间内没有新事件，那么这段时间内生产出的所有token中超出bucket容量的那部分token会被丢弃（deprecated tokens）。deprecated tokens 对应的时间跨度称为 DEPRECATED TIME SPAN，这个跨度内的时间都认为是无用的。
+注：我们可以将bucket视为队列，DEPRECATED TIME SPAN内产生的tokens根据先进先出原则都被出队丢弃了）
 
 ### 3.4 ZERO POINT
 
 time spans are continuous. That is, there is no gaps between these time spans on the timeline.
 
 Let's focus on the time point that marks the start of a new useful time span. We call this time point **ZERO POINT**. This is because the tokens that can be applied for at this time point is **always 0**, and the OCCUPIED TIME SPAN of a new event **can only start from this point at the earliest**.
-让我们关注标志着当前时间线上最近一个【新的、可用的时间跨度】开始的时间点。 
-我们称这个时间点为**ZERO POINT**。 这是因为此刻可申请的tokens总是为0，而新事件的 OCCUPIED TIME SPAN 最早只能从该点开始。
+
+（让我们关注标志着当前时间线上最近一个【新的、可用的时间跨度】开始的时间点。 
+我们称这个时间点为**ZERO POINT**。 这是因为此刻可申请的tokens总是为0，而新事件的 OCCUPIED TIME SPAN 最早只能从该点开始）
 
 eg.
 ```
@@ -100,7 +126,8 @@ eg.
 ### 3.5 ZERO POINT movement logic
 
 Here, **we are freed from complex calculations of time and tokens(how many tokens are there at what time point), and implement the token bucket algorithm by simply moving ZERO POINT on the timeline**.
-在这里，我们从时间和token的复杂计算关系（在什么时间点有多少token）中解放出来，通过ZERO POINT在时间线上的简单移动来实现token bucket算法。
+
+（在这里，我们从时间和token的复杂计算关系（在什么时间点有多少token）中解放出来，通过ZERO POINT在时间线上的简单移动来实现token bucket算法）
 
 There are only **3** situations where ZERO POINT can be moved:
 - **[occupying tokens]**. Occupying tokens is occupying the related time span, which is to **move the ZERO POINT forward by the same length of OCCUPIED TIME SPAN**. 
@@ -108,7 +135,8 @@ There are only **3** situations where ZERO POINT can be moved:
 - **[cancelling occupied tokens]**. Cancelling occupied tokens is cancelling the OCCUPIED TIME SPAN, which is to **move the ZERO POINT backward by the same length of OCCUPIED TIME SPAN**. And this is the only way to move the ZERO POINT backward.
 
 - **[DEPRECATED TIME SPAN appearing]**. Obviously, **the appearance of DEPRECATED TIME SPAN will move ZERO POINT forward by the same length of DEPRECATED TIME SPAN**.
-显然，DEPRECATED TIME SPAN 的出现会将 ZERO POINT 沿时间线的未来方向前移相同的时间长度
+
+（显然，DEPRECATED TIME SPAN 的出现会将 ZERO POINT 沿着时间线的未来方向前移相同的时间长度）
 
 
 -------
