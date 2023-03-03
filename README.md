@@ -1,11 +1,33 @@
-# 1. Introduction
-Package `watchdog` provides a rate limiter based on "token bucket" algorithm. It is a token bucket algorithm implementation **based on real-time calculation and ZERO POINT movement**. The generation of tokens is continuous rather than discrete.
+# 1. Overview
+Package `watchdog` provides an easy-to-use and reliable rate limiter based on "token bucket" algorithm. 
+
+Its implementation relies on **ZERO POINT movement mechanism based on real-time calculation**. 
 
 `watchdog` has **2** advantages:
 
-- **Simpler implementation**. `watchdog` implements token bucket algorithm based on the simple **ZERO POINT movement** mechanism, which is simpler and easier to understand than `golang.org/x/time/rate`, the official implementation 
+- **Simpler implementation**. `watchdog` implements token bucket algorithm based on the simple **ZERO POINT movement** mechanism, which is simpler and easier to understand than `golang.org/x/time/rate`, the official implementation. Thanks to ZERO POINT movement mechanism, the structs and token calculation methods provided by `watchdog` are both simpler than the official implementation.
 
-- **More reliable limiting mechanism**. `watchdog` calculates the token correctly, thanks to which the limiting mechanism it provides is reliable. The logic of `golang.org/x/time/rate` is wrong because it considers `reserved tokens` when calculating the returned tokens for canceled events. Related discussions can refer to:
+- **More reliable limiting mechanism**. `watchdog` calculates the token correctly, thanks to which the limiting mechanism it provides is reliable. The logic of `golang.org/x/time/rate` is wrong because it considers `reserved tokens` when calculating the returned tokens for canceled events. This bug is easily fixed by `watchdog`'s **zero point movement** mechanism.
+
+At the usage level, `watchdog` completely covers the functions of `golang.org/x/time/rate` and maintains a similar interface, so it does not require too much mental burden to use.
+
+（`watchdog`最大的优点是比官方实现`golang.org/x/time/rate`更简单，更容易理解，并且token的计算也更加可靠）
+
+# 2. Original impetus of development
+### 2.1 First, to make "token bucket" algorithm implementation simple and stupid
+
+The official implementation `golang.org/x/time/rate` is a little bit complicated due to its dizzying calculations. I want to make "token bucket" algorithm simpler, easier to understand and implement.
+
+So, `watchdog` proposes 2 core concepts: **[OCCUPIED TIME SPAN]** + **[ZERO POINT]**. 
+Based on these two concepts, ***the complex token calculation is transformed into a simple ZERO POINT movement***.
+
+（`watchdog`提出了2个核心概念：**OCCUPIED TIME SPAN**，**ZERO POINT**，并基于这两个概念将复杂的token计算转化为了简单的零点移动）
+
+For specific design ideas, see **My understanding of "token bucket" algorithm** below.
+
+### 2.2 Second, to fix calculation bugs of `golang.org/x/time/rate`
+
+The method of calculating the token in `golang.org/x/time/rate` is wrong. Related discussions can refer to:
 
   >https://github.com/golang/go/issues/56924
 
@@ -17,28 +39,7 @@ Package `watchdog` provides a rate limiter based on "token bucket" algorithm. It
 
   >https://learnku.com/go/t/71323
 
-  This bug is easily fixed by `watchdog`'s **zero point movement** mechanism
-
-
-At the usage level, `watchdog` completely covers the functions of `golang.org/x/time/rate` and maintains a similar interface, so it does not require too much mental burden to use
-
-（`watchdog`最大的优点是比官方实现`golang.org/x/time/rate`更简单，更容易理解，并且token的计算也更加可靠）
-
-# 2. Original impetus of development
-### 2.1 First
-**to make "token bucket" algorithm implementation simple and stupid**. 
-The official implementation `golang.org/x/time/rate` is a little bit complicated due to its dizzying calculations. I want to make "token bucket" algorithm simpler, easier to understand and implement, not like `golang.org/x/time/rate`.
-
-`watchdog` proposes 2 core concepts: **OCCUPIED TIME SPAN** + **ZERO POINT**. 
-Based on these two concepts, **the complex token calculation is transformed into a simple ZERO POINT movement**.
-
-（`watchdog`提出了2个核心概念：**OCCUPIED TIME SPAN**，**ZERO POINT**，并基于这两个概念将复杂的token计算转化为了简单的零点移动）
-
-For specific design ideas, see **My understanding of "token bucket" algorithm** below.
-
-### 2.2 Second
-**to fix calculation bugs of `golang.org/x/time/rate`**
-I think the method of calculating the token in `golang.org/x/time/rate` is wrong. For an example from https://github.com/golang/go/issues/56924:
+For an example from https://github.com/golang/go/issues/56924:
 ```
 func Test_tr(t *testing.T) {
 	tr()
