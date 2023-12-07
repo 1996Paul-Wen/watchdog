@@ -3,8 +3,11 @@ package watchdog
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 func TestWait(t *testing.T) {
@@ -42,4 +45,48 @@ func TestTokens(t *testing.T) {
 
 	o.CancelAt(t3)
 	fmt.Printf("t3 tokens: %+v\n", l.TokensAt(t3)) // bucket left 6 token
+}
+
+func pressureTestWatchdog(limit int) {
+	l := NewLimiter(float64(limit), 1)
+	wg := sync.WaitGroup{}
+	for i := 0; i < limit; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			if err := l.WaitN(context.Background(), 1); err != nil {
+				fmt.Println(i, err)
+			}
+		}(i)
+	}
+	wg.Wait()
+}
+
+// go test -benchmem -benchtime 30s -run=^$ -bench ^BenchmarkWatchdogMillionConcurrency$ github.com/1996Paul-Wen/watchdog
+func BenchmarkWatchdogMillionConcurrency(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		pressureTestWatchdog(5000000)
+	}
+}
+
+func pressureTestRatelimiter(limit int) {
+	l := rate.NewLimiter(rate.Limit(limit), 1)
+	wg := sync.WaitGroup{}
+	for i := 0; i < limit; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			if err := l.WaitN(context.Background(), 1); err != nil {
+				fmt.Println(i, err)
+			}
+		}(i)
+	}
+	wg.Wait()
+}
+
+// go test -benchmem -benchtime 30s -run=^$ -bench ^BenchmarkRatelimiterMillionConcurrency$ github.com/1996Paul-Wen/watchdog
+func BenchmarkRatelimiterMillionConcurrency(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		pressureTestRatelimiter(5000000)
+	}
 }
