@@ -178,7 +178,10 @@ func TestTokens(t *testing.T) {
 }
 ```
 
-||1 million / s|2 million / s|5 million / s|
+# Benchmark Comparison
+||1 million / s and 1 million accesses |2 million / s and 2 million accesses|5 million / s and 5 million accesses|
 |---|---|---|---|
 |watchdog|1027304009 ns/op; 299507625 B/op; 5984962 allocs/op|1583128727 ns/op; 299792351 B/op; 7530348 allocs/op|3889991417 ns/op; 523092253 B/op; 15313395 allocs/op|
 ratelimiter|881121099 ns/op; 199872549 B/op; 4760381 allocs/op|1678894050 ns/op; 320223932 B/op; 8059127 allocs/op|3757052398 ns/op; 645881124 B/op; 17422277 allocs/op|
+
+The "op" here means that the access of the target size has all been processed.
