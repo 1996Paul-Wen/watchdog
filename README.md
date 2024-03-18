@@ -76,7 +76,7 @@ After `r` cancelled and tokens returned back at t3 moment, the bucket of the lim
 
 `watchdog` fixes this calculation bug. In `watchdog`, **how many tokens are taken and how many will be returned if cancellation happens, as if nothing happened**.
 
-# 3. My understand of "token bucket" algorithm
+# 3. Watchdog's understand of "token bucket" algorithm
 
 ### 3.1 Pre-knowledge preparation: Events are distributed on the timeline in the form of time spans
 **We say that an event requires several tokens, but what is actually required is the time span corresponding to these tokens on the timeline**. The tokens generated within this time span are all occupied by this event. 
